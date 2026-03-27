@@ -1,0 +1,1 @@
+#include <iostream>\nusing namespace std;\n\nint main() {\n    int t;\n    cin >> t;\n    while (t--) {\n        int x, y;\n        cin >> x >> y;\n        if ((x + y) % 2 == 0 && y >= -x) {\n            cout << \"YES\" << endl;\n        } else {\n            cout << \"NO\" << endl;\n        }\n    }\n    return 0;\n}
