@@ -49,14 +49,24 @@ def normalize_model_output(text: str) -> str:
     return text.strip() + "\n"
 
 
-def _select_model_text(model: dict, field: str) -> str:
-    if field != "auto":
-        return model.get(field, "")
+def _select_variant_payload(model: dict, variant: str) -> dict:
+    key = f"{variant}_output"
+    payload = model.get(key)
+    if isinstance(payload, dict):
+        return payload
+    return model
 
-    if model.get("raw_output"):
-        return model["raw_output"]
-    if model.get("generated_text"):
-        return model["generated_text"]
+
+def _select_model_text(model: dict, field: str, variant: str) -> str:
+    payload = _select_variant_payload(model, variant)
+
+    if field != "auto":
+        return payload.get(field, "")
+
+    if payload.get("raw_output"):
+        return payload["raw_output"]
+    if payload.get("generated_text"):
+        return payload["generated_text"]
     return ""
 
 
@@ -73,10 +83,10 @@ def load_text(args: argparse.Namespace) -> str:
         if args.model_key is not None:
             for model in models:
                 if model.get("model_key") == args.model_key:
-                    return _select_model_text(model, args.field)
+                    return _select_model_text(model, args.field, args.variant)
             raise ValueError(f"Model key not found: {args.model_key}")
 
-        return _select_model_text(models[0], args.field)
+        return _select_model_text(models[0], args.field, args.variant)
 
     if args.input_file is not None:
         return args.input_file.read_text(encoding="utf-8")
@@ -111,6 +121,12 @@ def main() -> int:
         choices=("auto", "raw_output", "generated_text", "reasoning_trace"),
         default="auto",
         help="Which field to use from model_outputs.json. 'auto' prefers raw_output, then generated_text.",
+    )
+    parser.add_argument(
+        "--variant",
+        choices=("english", "chinese"),
+        default="english",
+        help="Which language-specific output block to use from model_outputs.json.",
     )
     parser.add_argument(
         "--output",

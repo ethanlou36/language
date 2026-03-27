@@ -132,9 +132,9 @@ def _build_problem_prompt(problem: dict[str, Any], system_prompt: str) -> str:
         ]
     ).strip()
 
-    combined_prompt = "\n\n".join([system_prompt, english_prompt, chinese_prompt]).strip()
     return {
-        "combined_prompt": combined_prompt,
+        "english_combined_prompt": "\n\n".join([system_prompt, english_prompt]).strip(),
+        "chinese_combined_prompt": "\n\n".join([system_prompt, chinese_prompt]).strip(),
         "english_prompt": english_prompt,
         "chinese_prompt": chinese_prompt,
     }
@@ -301,7 +301,8 @@ def _build_worker_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--worker", action="store_true")
     parser.add_argument("--model-key", required=True)
-    parser.add_argument("--prompt-file", type=Path, required=True)
+    parser.add_argument("--english-prompt-file", type=Path, required=True)
+    parser.add_argument("--chinese-prompt-file", type=Path, required=True)
     parser.add_argument("--cache-dir", type=Path, required=True)
     parser.add_argument("--hf-token")
     parser.add_argument("--max-new-tokens", type=int, required=True)
@@ -314,7 +315,8 @@ def _build_worker_parser() -> argparse.ArgumentParser:
 
 async def _run_worker(
     model_key: str,
-    prompt_file: Path,
+    english_prompt_file: Path,
+    chinese_prompt_file: Path,
     args: argparse.Namespace,
 ) -> dict[str, Any]:
     process = await asyncio.create_subprocess_exec(
@@ -323,8 +325,10 @@ async def _run_worker(
         "--worker",
         "--model-key",
         model_key,
-        "--prompt-file",
-        str(prompt_file),
+        "--english-prompt-file",
+        str(english_prompt_file),
+        "--chinese-prompt-file",
+        str(chinese_prompt_file),
         "--cache-dir",
         str(args.cache_dir),
         "--max-new-tokens",
@@ -368,7 +372,8 @@ async def _run_worker(
 
 
 async def _run_all_models(
-    prompt_file: Path,
+    english_prompt_file: Path,
+    chinese_prompt_file: Path,
     args: argparse.Namespace,
 ) -> list[dict[str, Any]]:
     max_concurrent = args.max_concurrent or len(args.models)
@@ -376,7 +381,12 @@ async def _run_all_models(
 
     async def run_one(model_key: str) -> dict[str, Any]:
         async with semaphore:
-            return await _run_worker(model_key=model_key, prompt_file=prompt_file, args=args)
+            return await _run_worker(
+                model_key=model_key,
+                english_prompt_file=english_prompt_file,
+                chinese_prompt_file=chinese_prompt_file,
+                args=args,
+            )
 
     tasks = [asyncio.create_task(run_one(model_key)) for model_key in args.models]
     return await asyncio.gather(*tasks)
@@ -431,6 +441,49 @@ def _input_device_for_model(model, requested_device: str) -> str:
     return str(model.device)
 
 
+def _generate_variant_output(
+    *,
+    model,
+    tokenizer,
+    prompt: str,
+    device: str,
+    max_new_tokens: int,
+    temperature: float,
+    top_p: float,
+    torch_module,
+) -> dict[str, str]:
+    inputs = _prepare_inputs(tokenizer, prompt, _input_device_for_model(model, device))
+    prompt_tokens = int(inputs["input_ids"].shape[-1])
+
+    generation_kwargs = {
+        "max_new_tokens": max_new_tokens,
+        "pad_token_id": tokenizer.pad_token_id,
+    }
+    if tokenizer.eos_token_id is not None:
+        generation_kwargs["eos_token_id"] = tokenizer.eos_token_id
+    if temperature > 0:
+        generation_kwargs.update(
+            {
+                "do_sample": True,
+                "temperature": temperature,
+                "top_p": top_p,
+            }
+        )
+    else:
+        generation_kwargs["do_sample"] = False
+
+    with torch_module.inference_mode():
+        outputs = model.generate(**inputs, **generation_kwargs)
+
+    completion = outputs[0][prompt_tokens:]
+    raw_output = tokenizer.decode(completion, skip_special_tokens=True).strip()
+    return {
+        "raw_output": raw_output,
+        "reasoning_trace": _extract_reasoning_trace(raw_output),
+        "generated_text": _extract_code_only(raw_output),
+    }
+
+
 def _run_worker_main(args: argparse.Namespace) -> int:
     started_at = time.perf_counter()
     spec = MODEL_SPECS[args.model_key]
@@ -439,7 +492,8 @@ def _run_worker_main(args: argparse.Namespace) -> int:
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
-        prompt = args.prompt_file.read_text(encoding="utf-8")
+        english_prompt = args.english_prompt_file.read_text(encoding="utf-8")
+        chinese_prompt = args.chinese_prompt_file.read_text(encoding="utf-8")
         device = _detect_device(torch, args.device)
         dtype = _resolve_dtype(torch, device, args.dtype)
 
@@ -473,33 +527,26 @@ def _run_worker_main(args: argparse.Namespace) -> int:
         if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
             tokenizer.pad_token_id = tokenizer.eos_token_id
 
-        inputs = _prepare_inputs(tokenizer, prompt, _input_device_for_model(model, device))
-        prompt_tokens = int(inputs["input_ids"].shape[-1])
-
-        generation_kwargs = {
-            "max_new_tokens": args.max_new_tokens,
-            "pad_token_id": tokenizer.pad_token_id,
-        }
-        if tokenizer.eos_token_id is not None:
-            generation_kwargs["eos_token_id"] = tokenizer.eos_token_id
-        if args.temperature > 0:
-            generation_kwargs.update(
-                {
-                    "do_sample": True,
-                    "temperature": args.temperature,
-                    "top_p": args.top_p,
-                }
-            )
-        else:
-            generation_kwargs["do_sample"] = False
-
-        with torch.inference_mode():
-            outputs = model.generate(**inputs, **generation_kwargs)
-
-        completion = outputs[0][prompt_tokens:]
-        raw_output = tokenizer.decode(completion, skip_special_tokens=True).strip()
-        generated_text = _extract_code_only(raw_output)
-        reasoning_trace = _extract_reasoning_trace(raw_output)
+        english_output = _generate_variant_output(
+            model=model,
+            tokenizer=tokenizer,
+            prompt=english_prompt,
+            device=device,
+            max_new_tokens=args.max_new_tokens,
+            temperature=args.temperature,
+            top_p=args.top_p,
+            torch_module=torch,
+        )
+        chinese_output = _generate_variant_output(
+            model=model,
+            tokenizer=tokenizer,
+            prompt=chinese_prompt,
+            device=device,
+            max_new_tokens=args.max_new_tokens,
+            temperature=args.temperature,
+            top_p=args.top_p,
+            torch_module=torch,
+        )
 
         result = {
             "model_key": spec.key,
@@ -510,9 +557,8 @@ def _run_worker_main(args: argparse.Namespace) -> int:
             "dtype": str(dtype).replace("torch.", ""),
             "local_model_path": local_model_path,
             "elapsed_seconds": round(time.perf_counter() - started_at, 2),
-            "raw_output": raw_output,
-            "reasoning_trace": reasoning_trace,
-            "generated_text": generated_text,
+            "english_output": english_output,
+            "chinese_output": chinese_output,
         }
         print(json.dumps(result, ensure_ascii=False))
         return 0
@@ -541,9 +587,19 @@ async def _run_parent_main(args: argparse.Namespace) -> int:
     prompt_bundle = _build_problem_prompt(problem, system_prompt=args.system_prompt)
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        prompt_file = Path(temp_dir) / "problem_prompt.txt"
-        prompt_file.write_text(prompt_bundle["combined_prompt"], encoding="utf-8")
-        results = await _run_all_models(prompt_file=prompt_file, args=args)
+        english_prompt_file = Path(temp_dir) / "english_prompt.txt"
+        chinese_prompt_file = Path(temp_dir) / "chinese_prompt.txt"
+        english_prompt_file.write_text(
+            prompt_bundle["english_combined_prompt"], encoding="utf-8"
+        )
+        chinese_prompt_file.write_text(
+            prompt_bundle["chinese_combined_prompt"], encoding="utf-8"
+        )
+        results = await _run_all_models(
+            english_prompt_file=english_prompt_file,
+            chinese_prompt_file=chinese_prompt_file,
+            args=args,
+        )
 
     payload = {
         "problem": {
