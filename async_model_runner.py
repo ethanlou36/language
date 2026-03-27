@@ -101,7 +101,7 @@ def _build_problem_prompt(problem: dict[str, Any], system_prompt: str) -> str:
 
     prompt_parts.append("")
     prompt_parts.append(
-        "Think through edge cases before writing code. Output only the final Python 3 code, with no prose and no Markdown fences."
+        "Think through edge cases before writing code. Output only the final C++ code, with no prose and no Markdown fences."
     )
     return "\n".join(prompt_parts).strip()
 
