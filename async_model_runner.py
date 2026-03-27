@@ -73,8 +73,8 @@ MODEL_SPECS = {
 }
 
 DEFAULT_MODEL_KEYS = [
-    "qwen25-coder-7b",
-    "deepseek-coder-1.3b",
+    "qwen25-coder-14b",
+    "deepseek-coder-6.7b",
 ]
 
 
