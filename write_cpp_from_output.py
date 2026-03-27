@@ -49,6 +49,17 @@ def normalize_model_output(text: str) -> str:
     return text.strip() + "\n"
 
 
+def _select_model_text(model: dict, field: str) -> str:
+    if field != "auto":
+        return model.get(field, "")
+
+    if model.get("raw_output"):
+        return model["raw_output"]
+    if model.get("generated_text"):
+        return model["generated_text"]
+    return ""
+
+
 def load_text(args: argparse.Namespace) -> str:
     if args.text is not None:
         return args.text
@@ -62,10 +73,10 @@ def load_text(args: argparse.Namespace) -> str:
         if args.model_key is not None:
             for model in models:
                 if model.get("model_key") == args.model_key:
-                    return model.get("generated_text", "")
+                    return _select_model_text(model, args.field)
             raise ValueError(f"Model key not found: {args.model_key}")
 
-        return models[0].get("generated_text", "")
+        return _select_model_text(models[0], args.field)
 
     if args.input_file is not None:
         return args.input_file.read_text(encoding="utf-8")
@@ -94,6 +105,12 @@ def main() -> int:
     parser.add_argument(
         "--model-key",
         help="Optional model_key to select when using --input-json.",
+    )
+    parser.add_argument(
+        "--field",
+        choices=("auto", "raw_output", "generated_text", "reasoning_trace"),
+        default="auto",
+        help="Which field to use from model_outputs.json. 'auto' prefers raw_output, then generated_text.",
     )
     parser.add_argument(
         "--output",

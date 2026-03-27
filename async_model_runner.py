@@ -81,31 +81,63 @@ def _build_problem_prompt(problem: dict[str, Any], system_prompt: str) -> str:
     title = problem.get("name", "Untitled Problem")
     statement = problem.get("statement", "").strip()
     sample_tests = problem.get("sample_tests", [])
-
-    prompt_parts = [system_prompt, "", f"Problem: {title}"]
+    shared_problem_parts = [f"Problem: {title}"]
 
     if problem.get("problem_url"):
-        prompt_parts.append(f"Source: {problem['problem_url']}")
+        shared_problem_parts.append(f"Source: {problem['problem_url']}")
 
-    prompt_parts.extend(["", "Statement:", statement or "No statement available."])
+    shared_problem_parts.extend(["", "Statement:", statement or "No statement available."])
 
     if sample_tests:
-        prompt_parts.append("")
-        prompt_parts.append("Sample Tests:")
+        shared_problem_parts.append("")
+        shared_problem_parts.append("Sample Tests:")
         for index, sample in enumerate(sample_tests, start=1):
-            prompt_parts.append(f"Sample {index} Input:")
-            prompt_parts.append(sample.get("input", ""))
-            prompt_parts.append(f"Sample {index} Output:")
-            prompt_parts.append(sample.get("output", ""))
+            shared_problem_parts.append(f"Sample {index} Input:")
+            shared_problem_parts.append(sample.get("input", ""))
+            shared_problem_parts.append(f"Sample {index} Output:")
+            shared_problem_parts.append(sample.get("output", ""))
 
-    prompt_parts.append("")
-    prompt_parts.append(
-        "Think through edge cases before writing code. You may include brief reasoning before the final answer if needed."
-    )
-    prompt_parts.append(
-        "Your final answer must end with <final_code> on its own line, then the complete C++ solution, then </final_code> on its own line."
-    )
-    return "\n".join(prompt_parts).strip()
+    english_prompt = "\n".join(
+        [
+            "English Prompt:",
+            *shared_problem_parts,
+            "",
+            "Reason carefully about edge cases and algorithm choice.",
+            "You may include a visible reasoning trace in English before the final answer if needed.",
+            "Your final answer must end with <final_code> on its own line, then the complete C++ solution, then </final_code> on its own line.",
+        ]
+    ).strip()
+
+    chinese_prompt = "\n".join(
+        [
+            "中文提示：",
+            f"题目：{title}",
+            *( [f"题目链接：{problem['problem_url']}"] if problem.get("problem_url") else [] ),
+            "",
+            "题目描述：",
+            statement or "没有可用的题面。",
+            "",
+            "样例：",
+            *(
+                [
+                    f"样例 {index} 输入：\n{sample.get('input', '')}\n样例 {index} 输出：\n{sample.get('output', '')}"
+                    for index, sample in enumerate(sample_tests, start=1)
+                ]
+                if sample_tests
+                else ["没有可用的样例。"]
+            ),
+            "",
+            "请用中文进行推理和分析，先给出必要的中文思路，再给出最终答案。",
+            "最终答案必须以单独一行的 <final_code> 开始，随后给出完整的 C++ 代码，再以单独一行的 </final_code> 结束。",
+        ]
+    ).strip()
+
+    combined_prompt = "\n\n".join([system_prompt, english_prompt, chinese_prompt]).strip()
+    return {
+        "combined_prompt": combined_prompt,
+        "english_prompt": english_prompt,
+        "chinese_prompt": chinese_prompt,
+    }
 
 
 def _extract_code_only(text: str) -> str:
@@ -125,6 +157,19 @@ def _extract_code_only(text: str) -> str:
         while lines and lines[-1].strip() == "```":
             lines.pop()
         return "\n".join(lines).strip()
+    return stripped
+
+
+def _extract_reasoning_trace(text: str) -> str:
+    stripped = text.strip()
+    start_tag = "<final_code>"
+
+    if start_tag in stripped:
+        return stripped.split(start_tag, 1)[0].strip()
+
+    if stripped.startswith("```"):
+        return ""
+
     return stripped
 
 
@@ -452,9 +497,9 @@ def _run_worker_main(args: argparse.Namespace) -> int:
             outputs = model.generate(**inputs, **generation_kwargs)
 
         completion = outputs[0][prompt_tokens:]
-        generated_text = _extract_code_only(
-            tokenizer.decode(completion, skip_special_tokens=True)
-        )
+        raw_output = tokenizer.decode(completion, skip_special_tokens=True).strip()
+        generated_text = _extract_code_only(raw_output)
+        reasoning_trace = _extract_reasoning_trace(raw_output)
 
         result = {
             "model_key": spec.key,
@@ -465,6 +510,8 @@ def _run_worker_main(args: argparse.Namespace) -> int:
             "dtype": str(dtype).replace("torch.", ""),
             "local_model_path": local_model_path,
             "elapsed_seconds": round(time.perf_counter() - started_at, 2),
+            "raw_output": raw_output,
+            "reasoning_trace": reasoning_trace,
             "generated_text": generated_text,
         }
         print(json.dumps(result, ensure_ascii=False))
@@ -491,11 +538,11 @@ async def _run_parent_main(args: argparse.Namespace) -> int:
 
     args.cache_dir.mkdir(parents=True, exist_ok=True)
     problem = _load_problem_from_args(args)
-    prompt = _build_problem_prompt(problem, system_prompt=args.system_prompt)
+    prompt_bundle = _build_problem_prompt(problem, system_prompt=args.system_prompt)
 
     with tempfile.TemporaryDirectory() as temp_dir:
         prompt_file = Path(temp_dir) / "problem_prompt.txt"
-        prompt_file.write_text(prompt, encoding="utf-8")
+        prompt_file.write_text(prompt_bundle["combined_prompt"], encoding="utf-8")
         results = await _run_all_models(prompt_file=prompt_file, args=args)
 
     payload = {
@@ -506,6 +553,8 @@ async def _run_parent_main(args: argparse.Namespace) -> int:
             "rating": problem.get("rating"),
             "problem_url": problem.get("problem_url"),
         },
+        "english_prompt": prompt_bundle["english_prompt"],
+        "chinese_prompt": prompt_bundle["chinese_prompt"],
         "models": results,
     }
 
