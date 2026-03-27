@@ -3,9 +3,27 @@ import json
 from pathlib import Path
 
 
+def _decode_serialized_text(text: str) -> str:
+    if "\n" in text:
+        return text
+
+    if text.startswith('"') and text.endswith('"'):
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            return text
+
+    if any(token in text for token in (r"\n", r"\"", r"\t", r"\r")):
+        try:
+            return json.loads(f'"{text}"')
+        except json.JSONDecodeError:
+            return text
+
+    return text
+
+
 def normalize_model_output(text: str) -> str:
-    text = text.strip()
-    text = bytes(text, "utf-8").decode("unicode_escape")
+    text = _decode_serialized_text(text.strip())
 
     if text.startswith("```"):
         lines = text.splitlines()
