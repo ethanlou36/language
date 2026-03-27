@@ -17,7 +17,7 @@ from fetch import fetch_problems
 
 DEFAULT_SYSTEM_PROMPT = (
     "You are an expert competitive programmer. Solve the problem carefully and return only the final "
-    "Python 3 program needed to solve it. Do not include explanations, comments outside the code, or "
+    "c++ program needed to solve it. Do not include explanations, comments outside the code, or "
     "Markdown code fences."
 )
 
