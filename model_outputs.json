@@ -1,0 +1,65 @@
+{
+  "problem": {
+    "name": "Parkour Design",
+    "contestId": 2202,
+    "index": "A",
+    "rating": 800,
+    "problem_url": "https://mirror.codeforces.com/problemset/problem/2202/A"
+  },
+  "models": [
+    {
+      "model_key": "qwen25-coder-32b",
+      "display_name": "Qwen2.5-Coder-32B-Instruct",
+      "repo_id": "Qwen/Qwen2.5-Coder-32B-Instruct",
+      "status": "error",
+      "error": "No module named 'transformers'",
+      "traceback": "Traceback (most recent call last):\n  File \"/Users/ethanlou/optimal_language/async_model_runner.py\", line 357, in _run_worker_main\n    from transformers import AutoModelForCausalLM, AutoTokenizer\nModuleNotFoundError: No module named 'transformers'\n",
+      "elapsed_seconds": 3.1
+    },
+    {
+      "model_key": "qwen25-coder-14b",
+      "display_name": "Qwen2.5-Coder-14B-Instruct",
+      "repo_id": "Qwen/Qwen2.5-Coder-14B-Instruct",
+      "status": "error",
+      "error": "No module named 'transformers'",
+      "traceback": "Traceback (most recent call last):\n  File \"/Users/ethanlou/optimal_language/async_model_runner.py\", line 357, in _run_worker_main\n    from transformers import AutoModelForCausalLM, AutoTokenizer\nModuleNotFoundError: No module named 'transformers'\n",
+      "elapsed_seconds": 3.13
+    },
+    {
+      "model_key": "codeqwen15-7b",
+      "display_name": "CodeQwen1.5-7B-Chat",
+      "repo_id": "Qwen/CodeQwen1.5-7B-Chat",
+      "status": "error",
+      "error": "No module named 'transformers'",
+      "traceback": "Traceback (most recent call last):\n  File \"/Users/ethanlou/optimal_language/async_model_runner.py\", line 357, in _run_worker_main\n    from transformers import AutoModelForCausalLM, AutoTokenizer\nModuleNotFoundError: No module named 'transformers'\n",
+      "elapsed_seconds": 3.1
+    },
+    {
+      "model_key": "deepseek-coder-v2",
+      "display_name": "DeepSeek-Coder-V2-Instruct",
+      "repo_id": "deepseek-ai/DeepSeek-Coder-V2-Instruct",
+      "status": "error",
+      "error": "No module named 'transformers'",
+      "traceback": "Traceback (most recent call last):\n  File \"/Users/ethanlou/optimal_language/async_model_runner.py\", line 357, in _run_worker_main\n    from transformers import AutoModelForCausalLM, AutoTokenizer\nModuleNotFoundError: No module named 'transformers'\n",
+      "elapsed_seconds": 3.11
+    },
+    {
+      "model_key": "deepseek-coder-33b",
+      "display_name": "DeepSeek-Coder-33B-Instruct",
+      "repo_id": "deepseek-ai/deepseek-coder-33b-instruct",
+      "status": "error",
+      "error": "No module named 'transformers'",
+      "traceback": "Traceback (most recent call last):\n  File \"/Users/ethanlou/optimal_language/async_model_runner.py\", line 357, in _run_worker_main\n    from transformers import AutoModelForCausalLM, AutoTokenizer\nModuleNotFoundError: No module named 'transformers'\n",
+      "elapsed_seconds": 3.1
+    },
+    {
+      "model_key": "deepseek-coder-6.7b",
+      "display_name": "DeepSeek-Coder-6.7B-Instruct",
+      "repo_id": "deepseek-ai/deepseek-coder-6.7b-instruct",
+      "status": "error",
+      "error": "No module named 'transformers'",
+      "traceback": "Traceback (most recent call last):\n  File \"/Users/ethanlou/optimal_language/async_model_runner.py\", line 357, in _run_worker_main\n    from transformers import AutoModelForCausalLM, AutoTokenizer\nModuleNotFoundError: No module named 'transformers'\n",
+      "elapsed_seconds": 3.08
+    }
+  ]
+}
