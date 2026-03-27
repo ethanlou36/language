@@ -16,8 +16,9 @@ from fetch import fetch_problems
 
 
 DEFAULT_SYSTEM_PROMPT = (
-    "You are an expert competitive programmer. Solve the problem carefully. "
-    "Return a concise explanation, the core algorithm, time complexity, and a Python 3 solution."
+    "You are an expert competitive programmer. Solve the problem carefully and return only the final "
+    "Python 3 program needed to solve it. Do not include explanations, comments outside the code, or "
+    "Markdown code fences."
 )
 
 
@@ -29,6 +30,11 @@ class ModelSpec:
 
 
 MODEL_SPECS = {
+    "qwen25-coder-7b": ModelSpec(
+        key="qwen25-coder-7b",
+        display_name="Qwen2.5-Coder-7B-Instruct",
+        repo_id="Qwen/Qwen2.5-Coder-7B-Instruct",
+    ),
     "qwen25-coder-32b": ModelSpec(
         key="qwen25-coder-32b",
         display_name="Qwen2.5-Coder-32B-Instruct",
@@ -59,11 +65,16 @@ MODEL_SPECS = {
         display_name="DeepSeek-Coder-6.7B-Instruct",
         repo_id="deepseek-ai/deepseek-coder-6.7b-instruct",
     ),
+    "deepseek-coder-1.3b": ModelSpec(
+        key="deepseek-coder-1.3b",
+        display_name="DeepSeek-Coder-1.3B-Instruct",
+        repo_id="deepseek-ai/deepseek-coder-1.3b-instruct",
+    ),
 }
 
 DEFAULT_MODEL_KEYS = [
-    "codeqwen15-7b",
-    "deepseek-coder-6.7b",
+    "qwen25-coder-7b",
+    "deepseek-coder-1.3b",
 ]
 
 
@@ -90,9 +101,21 @@ def _build_problem_prompt(problem: dict[str, Any], system_prompt: str) -> str:
 
     prompt_parts.append("")
     prompt_parts.append(
-        "Think through edge cases before writing code. If the prompt is malformed, say so explicitly."
+        "Think through edge cases before writing code. Output only the final Python 3 code, with no prose and no Markdown fences."
     )
     return "\n".join(prompt_parts).strip()
+
+
+def _extract_code_only(text: str) -> str:
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        lines = stripped.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        while lines and lines[-1].strip() == "```":
+            lines.pop()
+        return "\n".join(lines).strip()
+    return stripped
 
 
 def _load_problem_from_args(args: argparse.Namespace) -> dict[str, Any]:
@@ -419,7 +442,9 @@ def _run_worker_main(args: argparse.Namespace) -> int:
             outputs = model.generate(**inputs, **generation_kwargs)
 
         completion = outputs[0][prompt_tokens:]
-        generated_text = tokenizer.decode(completion, skip_special_tokens=True).strip()
+        generated_text = _extract_code_only(
+            tokenizer.decode(completion, skip_special_tokens=True)
+        )
 
         result = {
             "model_key": spec.key,
