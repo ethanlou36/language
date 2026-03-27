@@ -22,8 +22,21 @@ def _decode_serialized_text(text: str) -> str:
     return text
 
 
+def _extract_final_code_block(text: str) -> str:
+    start_tag = "<final_code>"
+    end_tag = "</final_code>"
+
+    if start_tag in text and end_tag in text:
+        start = text.index(start_tag) + len(start_tag)
+        end = text.index(end_tag, start)
+        return text[start:end].strip()
+
+    return text
+
+
 def normalize_model_output(text: str) -> str:
-    text = _decode_serialized_text(text.strip())
+    text = _extract_final_code_block(text.strip())
+    text = _decode_serialized_text(text)
 
     if text.startswith("```"):
         lines = text.splitlines()

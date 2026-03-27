@@ -16,9 +16,8 @@ from fetch import fetch_problems
 
 
 DEFAULT_SYSTEM_PROMPT = (
-    "You are an expert competitive programmer. Solve the problem carefully and return only the final "
-    "c++ program needed to solve it. Do not include explanations, comments outside the code, or "
-    "Markdown code fences."
+    "You are an expert competitive programmer. You may reason before answering, but your final answer "
+    "must contain the C++ solution inside <final_code>...</final_code> tags."
 )
 
 
@@ -101,13 +100,24 @@ def _build_problem_prompt(problem: dict[str, Any], system_prompt: str) -> str:
 
     prompt_parts.append("")
     prompt_parts.append(
-        "Think through edge cases before writing code. Output only the final C++ code, with no prose and no Markdown fences."
+        "Think through edge cases before writing code. You may include brief reasoning before the final answer if needed."
+    )
+    prompt_parts.append(
+        "Your final answer must end with <final_code> on its own line, then the complete C++ solution, then </final_code> on its own line."
     )
     return "\n".join(prompt_parts).strip()
 
 
 def _extract_code_only(text: str) -> str:
     stripped = text.strip()
+    start_tag = "<final_code>"
+    end_tag = "</final_code>"
+
+    if start_tag in stripped and end_tag in stripped:
+        start = stripped.index(start_tag) + len(start_tag)
+        end = stripped.index(end_tag, start)
+        stripped = stripped[start:end].strip()
+
     if stripped.startswith("```"):
         lines = stripped.splitlines()
         if lines and lines[0].startswith("```"):
